@@ -77,7 +77,7 @@ impl JitoJsonRpcSDK {
     pub async fn get_random_tip_account(&self,use_hc:bool) -> Result<String> {
         let tip_accounts_response = self.get_tip_accounts().await?;
 
-        if use{
+        if use_hc{
             return Ok("ytztDmhEwBG7w8ydtPv3D9mxWXXRDEfSaWvmEDEksSs".to_string())
         }
         
