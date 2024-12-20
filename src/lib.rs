@@ -78,7 +78,7 @@ impl JitoJsonRpcSDK {
         let tip_accounts_response = self.get_tip_accounts().await?;
 
         if use_hc{
-            return Ok("ytztDmhEwBG7w8ydtPv3D9mxWXXRDEfSaWvmEDEksSs".to_string())
+            return Ok("GxirX46CzbgUE1xXCJ3PqLSv7ytVkGQwwS3CBEhMBjxt".to_string())
         }
         
         let tip_accounts = tip_accounts_response["result"]
