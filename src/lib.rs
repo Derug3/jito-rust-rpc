@@ -44,8 +44,6 @@ impl JitoJsonRpcSDK {
             "params": params.unwrap_or(json!([]))
         });
 
-        println!("Sending request to: {}", url);
-        println!("Request body: {}", serde_json::to_string_pretty(&data).unwrap());
 
         let response = self.client
             .post(&url)
@@ -55,10 +53,8 @@ impl JitoJsonRpcSDK {
             .await?;
 
         let status = response.status();
-        println!("Response status: {}", status);
 
         let body = response.json::<Value>().await?;
-        println!("Response body: {}", serde_json::to_string_pretty(&body).unwrap());
 
         Ok(body)
     }
