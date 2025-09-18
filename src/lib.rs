@@ -3,6 +3,7 @@ use rand::seq::SliceRandom;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::fmt;
+use tracing::{debug, trace};
 
 pub struct JitoJsonRpcSDK {
     base_url: String,
@@ -46,8 +47,14 @@ impl JitoJsonRpcSDK {
             "jsonrpc": "2.0",
             "id": 1,
             "method": method,
-            "params": vec![params.unwrap_or(json!([])),json!({"encoding":"base64"})]
+            "params": params.unwrap_or(json!([]))
         });
+
+        trace!("Sending request to: {}", url);
+        trace!(
+            "Request body: {}",
+            serde_json::to_string_pretty(&data).unwrap()
+        );
 
         let response = self
             .client
@@ -58,8 +65,13 @@ impl JitoJsonRpcSDK {
             .await?;
 
         let status = response.status();
+        debug!("Response status: {}", status);
 
         let body = response.json::<Value>().await?;
+        trace!(
+            "Response body: {}",
+            serde_json::to_string_pretty(&body).unwrap()
+        );
 
         Ok(body)
     }
@@ -75,12 +87,8 @@ impl JitoJsonRpcSDK {
     }
 
     // Get a random tip account
-    pub async fn get_random_tip_account(&self, use_hc: bool) -> Result<String> {
+    pub async fn get_random_tip_account(&self) -> Result<String> {
         let tip_accounts_response = self.get_tip_accounts().await?;
-
-        if use_hc {
-            return Ok("GxirX46CzbgUE1xXCJ3PqLSv7ytVkGQwwS3CBEhMBjxt".to_string());
-        }
 
         let tip_accounts = tip_accounts_response["result"]
             .as_array()
@@ -102,9 +110,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.uuid {
-            format!("/bundles?uuid={}", uuid)
+            format!("/getBundleStatuses?uuid={}", uuid)
         } else {
-            "/bundles".to_string()
+            "/getBundleStatuses".to_string()
         };
 
         // Construct the params as a list within a list
@@ -126,16 +134,28 @@ impl JitoJsonRpcSDK {
             endpoint = format!("{}?uuid={}", endpoint, uuid);
         }
 
-        // Ensure params is an array of transactions
-        let transactions = match params {
+        // Create the parameters for the request
+        let request_params = match params {
+            // If params is already in the correct format [transactions, {encoding: "base64"}]
+            Some(ref value) if value.is_array() && value.as_array().unwrap().len() == 2 => {
+                // Use it as is
+                value.clone()
+            }
             Some(Value::Array(transactions)) => {
+                // Validate transactions
                 if transactions.is_empty() {
                     return Err(anyhow!("Bundle must contain at least one transaction"));
                 }
                 if transactions.len() > 5 {
                     return Err(anyhow!("Bundle can contain at most 5 transactions"));
                 }
-                transactions
+
+                json!([
+                    transactions,
+                    {
+                        "encoding": "base64"
+                    }
+                ])
             }
             _ => {
                 return Err(anyhow!(
@@ -144,11 +164,7 @@ impl JitoJsonRpcSDK {
             }
         };
 
-        // Wrap the transactions array in another array
-        let params = json!([transactions]);
-
-        // Send the wrapped transactions array
-        self.send_request(&endpoint, "sendBundle", Some(params))
+        self.send_request(&endpoint, "sendBundle", Some(request_params))
             .await
             .map_err(|e| anyhow!("Request error: {}", e))
     }
@@ -170,7 +186,6 @@ impl JitoJsonRpcSDK {
             format!("/transactions?{}", query_params.join("&"))
         };
 
-        // Construct params as an array instead of an object
         let params = match params {
             Some(Value::Object(map)) => {
                 let tx = map.get("tx").and_then(Value::as_str).unwrap_or_default();
@@ -195,12 +210,11 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_in_flight_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.uuid {
-            format!("/bundles?uuid={}", uuid)
+            format!("/getInflightBundleStatuses?uuid={}", uuid)
         } else {
-            "/bundles".to_string()
+            "/getInflightBundleStatuses".to_string()
         };
 
-        // Construct the params as a list within a list
         let params = json!([bundle_uuids]);
 
         self.send_request(&endpoint, "getInflightBundleStatuses", Some(params))
@@ -208,7 +222,7 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    // Helper method to convert Value to PrettyJsonValue
+    // Helper method
     pub fn prettify(value: Value) -> PrettyJsonValue {
         PrettyJsonValue(value)
     }
